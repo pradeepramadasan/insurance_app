@@ -1,0 +1,2 @@
+PyPDF2>=3.0.0
+json5>=0.9.11  # More tolerant JSON parsing
