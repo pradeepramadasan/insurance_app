@@ -1,3 +1,5 @@
 # Environment files
 x.env
+x1.env
 *.env
+*.jar

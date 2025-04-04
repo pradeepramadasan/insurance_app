@@ -1,0 +1,9 @@
+Policy holder: DOB
+Vehicles:  make, model, year, age.
+Drivers: Driver DOB, relationship . 
+Policy effective dates
+addressH3
+garagingH3
+num_segments=5
+algorithm=kmeans
+random_seed=42

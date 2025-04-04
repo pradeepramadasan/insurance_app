@@ -1,6 +1,7 @@
 from .iris import create_iris_agent
 from .mnemosyne import create_mnemosyne_agent
 from .ares import create_ares_agent
+from .hera import create_hera_agent
 from .demeter import create_demeter_agent
 from .apollo import create_apollo_agent
 from .calliope import create_calliope_agent
@@ -19,6 +20,7 @@ def initialize_agents():
     iris = create_iris_agent()
     mnemosyne = create_mnemosyne_agent()
     ares = create_ares_agent()
+    hera = create_hera_agent()
     demeter = create_demeter_agent()
     apollo = create_apollo_agent()
     calliope = create_calliope_agent()
@@ -41,6 +43,7 @@ def initialize_agents():
         "iris": iris,
         "mnemosyne": mnemosyne,
         "ares": ares,
+        "hera": hera,
         "demeter": demeter,
         "apollo": apollo,
         "calliope": calliope,

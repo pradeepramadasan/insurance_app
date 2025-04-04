@@ -2,6 +2,10 @@ import datetime
 import random as random_module  # Rename the import to avoid potential shadowing.Also needed for policy number generation
 import json
 from agents import initialize_agents
+from agents.hera import get_profile_recommendations
+
+
+
 from db.cosmos_db import (
     save_policy_checkpoint, 
     get_mandatory_questions, 
@@ -9,7 +13,184 @@ from db.cosmos_db import (
     confirm_policy
 )
 from utils.helpers import read_customer_data_from_file, show_current_status_and_confirm, extract_json_content
+# Add this function to your workflow process.py
+def process_with_hera(current_state, stage):
+    """
+    Process the current state with Hera at different workflow stages
+    
+    Args:
+        current_state (dict): Current workflow state
+        stage (str): Current workflow stage (iris, mnemosyne, ares)
+        
+    Returns:
+        dict: Updated workflow state with Hera recommendations
+    """
+    print(f"\n[Workflow] Processing stage {stage} with Hera...\n")
+    
+    # Call Hera to get recommendations based on the current stage
+    recommendations = get_profile_recommendations(current_state, stage)
+    
+    # Store recommendations in the workflow state
+    if "hera_recommendations" not in current_state:
+        current_state["hera_recommendations"] = {}
+    
+    current_state["hera_recommendations"][stage] = recommendations
+    
+    return current_state
+def call_customerprofile(customer_data):
+    """
+    Call customerprofile.py with customer data
+    
+    Args:
+        customer_data (dict): Customer profile data
+        
+    Returns:
+        str: Output from customerprofile.py execution
+    """
+    try:
+        # Create a temporary file to store the customer data
+        with tempfile.NamedTemporaryFile(mode='w+', suffix='.json', delete=False) as temp:
+            temp_file = temp.name
+            json.dump(customer_data, temp)
+        
+        # Call customerprofile.py with the temp file
+        script_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "customerprofile.py")
+        result = subprocess.run(
+            [sys.executable, script_path, "--input", temp_file],
+            capture_output=True,
+            text=True
+        )
+        
+        # Clean up the temp file
+        try:
+            os.remove(temp_file)
+        except:
+            pass
+        
+        return result.stdout
+    except Exception as e:
+        return f"Error calling customerprofile.py: {str(e)}"
 
+def parse_profile_output(output):
+    """
+    Parse the output from customerprofile.py to extract match information
+    
+    Args:
+        output (str): Output from customerprofile.py
+        
+    Returns:
+        dict: Dictionary with matches and suggestion
+    """
+    result = {
+        "matches": [],
+        "suggestion": "No specific suggestion available based on the provided data."
+    }
+    
+    # Extract matches
+    match_sections = output.split("--- MATCH #")
+    
+    for i in range(1, len(match_sections)):
+        section = match_sections[i]
+        match = {}
+        
+        # Extract similarity
+        similarity_match = section.split("(Similarity: ")
+        if len(similarity_match) > 1:
+            similarity_str = similarity_match[1].split(")")[0]
+            try:
+                match["similarity"] = float(similarity_str)
+            except:
+                match["similarity"] = 0.0
+                
+        # Extract policy number
+        policy_match = section.split("Policy Number: ")
+        if len(policy_match) > 1:
+            match["policyNumber"] = policy_match[1].split("\n")[0].strip()
+            
+        # Extract coverages
+        coverage_match = section.split("Coverages: ")
+        if len(coverage_match) > 1:
+            coverages_str = coverage_match[1].split("\n")[0].strip()
+            match["coverages"] = [cov.strip() for cov in coverages_str.split(",")]
+            
+        # Extract add-ons
+        addon_match = section.split("Add-ons: ")
+        if len(addon_match) > 1:
+            addons_str = addon_match[1].split("\n")[0].strip()
+            match["addOns"] = [addon.strip() for addon in addons_str.split(",")]
+            
+        # Extract premium
+        premium_match = section.split("Premium: $")
+        if len(premium_match) > 1:
+            try:
+                premium_str = premium_match[1].split("\n")[0].strip()
+                match["premium"] = float(premium_str)
+            except:
+                pass
+                
+        # Extract limits
+        limits = {}
+        limits_section_match = section.split("Key Limits:")
+        if len(limits_section_match) > 1:
+            limits_section = limits_section_match[1].split("\n  Deductibles:")[0]
+            for line in limits_section.split("\n"):
+                if ":" in line:
+                    parts = line.strip().split(":", 1)
+                    if len(parts) == 2:
+                        key = parts[0].strip().replace("    ", "")
+                        value = parts[1].strip()
+                        limits[key] = value
+        
+        if limits:
+            match["limits"] = limits
+            
+        # Extract deductibles
+        deductibles = {}
+        deductibles_section_match = section.split("Deductibles:")
+        if len(deductibles_section_match) > 1:
+            deductibles_section = deductibles_section_match[1].split("\n\n")[0]
+            for line in deductibles_section.split("\n"):
+                if ":" in line:
+                    parts = line.strip().split(":", 1)
+                    if len(parts) == 2:
+                        key = parts[0].strip().replace("    ", "")
+                        value = parts[1].strip()
+                        deductibles[key] = value
+        
+        if deductibles:
+            match["deductibles"] = deductibles
+                
+        # Add match to results
+        result["matches"].append(match)
+    
+    # Generate a suggestion based on the matches
+    if result["matches"]:
+        # Count coverages to find most common
+        coverage_counter = {}
+        for match in result["matches"]:
+            for coverage in match.get("coverages", []):
+                if coverage in coverage_counter:
+                    coverage_counter[coverage] += 1
+                else:
+                    coverage_counter[coverage] = 1
+        
+        # Sort coverages by frequency
+        sorted_coverages = sorted(coverage_counter.items(), key=lambda x: x[1], reverse=True)
+        top_coverages = [cov for cov, _ in sorted_coverages[:5]]
+        
+        # Generate suggestion
+        premiums = [match.get("premium", 0) for match in result["matches"] if "premium" in match]
+        
+        suggestion = "Based on similar customer profiles, consider these popular coverages: "
+        suggestion += ", ".join(top_coverages)
+        
+        if premiums:
+            avg_premium = sum(premiums) / len(premiums)
+            suggestion += f". Typical premium range: ${min(premiums):.2f} - ${max(premiums):.2f}, averaging ${avg_premium:.2f}."
+            
+        result["suggestion"] = suggestion
+    
+    return result
 def design_coverage_with_demeter(current_state, demeter, iris, user_proxy):
     """Design coverage using Demeter's language capabilities"""
     print("\n=== COVERAGE DESIGN WITH DEMETER ===")
@@ -351,6 +532,7 @@ def process_insurance_request(customer_file=None):
     iris = agents["iris"]
     mnemosyne = agents["mnemosyne"]
     ares = agents["ares"]
+    hera = agents["hera"]  # Make sure Hera is included
     demeter = agents["demeter"]
     apollo = agents["apollo"]
     calliope = agents["calliope"]
@@ -425,6 +607,7 @@ IMPORTANT: Return your response as valid JSON format with all extracted informat
             print(f"Email: {basic_profile.get('contact', {}).get('email', 'Not provided')}")
         
         confirmation = input("\nDo you confirm these details? (yes/no): ").strip().lower()
+        current_state = process_with_hera(current_state, "iris")
         if confirmation != "yes":
             print("[Iris] Updating basic profile information.")
             basic_profile["name"] = input("Enter customer name: ").strip() or basic_profile.get("name", "")
@@ -528,6 +711,7 @@ Return the complete customer profile as JSON.
             
         # Update profile with detailed information
         current_state["customerProfile"] = detailed_profile
+        current_state = process_with_hera(current_state, "mnemosyne")
         save_policy_checkpoint(current_state, "detailed_profile_completed")
     else:
         print("Workflow halted at detailed profile stage.")
@@ -539,7 +723,7 @@ Return the complete customer profile as JSON.
             # Exit workflow if underwriting fails
             save_policy_checkpoint(current_state, "underwriting_failed")
             return
-        
+        current_state = process_with_hera(current_state, "mnemosyne")
         save_policy_checkpoint(current_state, "underwriting_completed")
     else:
         print("Workflow halted at underwriting verification stage.")
@@ -560,6 +744,7 @@ Return the complete customer profile as JSON.
             risk_info = {"riskScore": 5.0, "riskFactors": ["Default risk assessment"]}
         
         current_state["risk_info"] = risk_info
+        current_state = process_with_hera(current_state, "mnemosyne")
         save_policy_checkpoint(current_state, "risk_assessment_completed")
         print(f"[Ares] Risk evaluation completed. Risk Score: {risk_info.get('riskScore', 'N/A')}")
     else:
