@@ -1,14 +1,28 @@
-from azure.identity import AzureCliCredential
-from azure.cosmos import CosmosClient, PartitionKey, exceptions
 import datetime
 import os
 import random
 import json
-# To this:
-from config import COSMOS_ENDPOINT, DATABASE_NAME, DRAFTS_CONTAINER, ISSUED_CONTAINER
+import logging
+from azure.cosmos import exceptions
+# Import the connection manager
+from .cosmos_connection import CosmosConnectionManager
 
-# Add autopm container name
-AUTOPM_CONTAINER = "autopm"
+logger = logging.getLogger("cosmos_db")
+
+# Only declare these once
+use_cosmos = False
+autopm_container = None
+drafts_container = None
+issued_container = None
+
+# Container names - define only once
+AUTOPM_CONTAINER_NAME = "autopm"
+DRAFTS_CONTAINER_NAME = "PolicyDrafts"
+ISSUED_CONTAINER_NAME = "PolicyIssued"
+
+# Database settings
+COSMOS_ENDPOINT = os.getenv("COSMOS_ENDPOINT")
+DATABASE_NAME = os.getenv("COSMOS_DATABASE_NAME", "insurance")
 
 # In-memory storage as fallback
 in_memory_db = {
@@ -35,59 +49,72 @@ in_memory_db = {
         }
     ]
 }
-use_cosmos = False  # Will be set to True if connection succeeds
-
-# Global container references
-drafts_container = None
-issued_container = None
-autopm_container = None  # Add reference to autopm container
 
 def init_cosmos_db():
-    """Initialize connection to Cosmos DB"""
-    global use_cosmos, drafts_container, issued_container, autopm_container
-    
+    """Initialize Cosmos DB connection using the connection manager"""
     try:
-        if not COSMOS_ENDPOINT:
-            raise ValueError("COSMOS_ENDPOINT not set in environment variables")
+        # Initialize the connection manager
+        connection_manager = CosmosConnectionManager.get_instance()
+        client = connection_manager.get_client()
         
-        print("Attempting to connect to Cosmos DB...")
-        credential = AzureCliCredential()
-        cosmos_client = CosmosClient(COSMOS_ENDPOINT, credential=credential)
+        # Try to initialize the specific containers we need
+        global autopm_container, drafts_container, issued_container, use_cosmos
         
-        # Test the connection by listing databases
-        list(cosmos_client.list_databases())
-        print("Successfully authenticated with Cosmos DB")
-        
-        # Create database and containers if they don't exist
-        database = cosmos_client.create_database_if_not_exists(id=DATABASE_NAME)
-        
-        drafts_container = database.create_container_if_not_exists(
-            id=DRAFTS_CONTAINER,
-            partition_key=PartitionKey(path="/policyNumber")
-        )
-        
-        issued_container = database.create_container_if_not_exists(
-            id=ISSUED_CONTAINER,
-            partition_key=PartitionKey(path="/policyNumber")
-        )
-        
-        # Add reference to autopm container (don't create if it doesn't exist)
         try:
-            autopm_container = database.get_container_client(AUTOPM_CONTAINER)
-            print(f"Connected to {AUTOPM_CONTAINER} container successfully.")
-        except exceptions.CosmosResourceNotFoundError:
-            print(f"Warning: {AUTOPM_CONTAINER} container not found. Using in-memory fallback for underwriting questions.")
+            autopm_container = connection_manager.get_container(AUTOPM_CONTAINER_NAME)
+        except Exception as e:
+            logger.warning(f"Could not connect to {AUTOPM_CONTAINER_NAME}: {str(e)}")
+            autopm_container = None
+            
+        try:
+            drafts_container = connection_manager.get_container(DRAFTS_CONTAINER_NAME)
+        except Exception as e:
+            logger.warning(f"Could not connect to {DRAFTS_CONTAINER_NAME}: {str(e)}")
+            drafts_container = None
+            
+        try:
+            issued_container = connection_manager.get_container(ISSUED_CONTAINER_NAME)
+        except Exception as e:
+            logger.warning(f"Could not connect to {ISSUED_CONTAINER_NAME}: {str(e)}")
+            issued_container = None
+            
+        # Set cosmos flag if any container is available
+        use_cosmos = any([autopm_container, drafts_container, issued_container])
         
-        print("Connected to Cosmos DB containers successfully.")
-        use_cosmos = True
-        
-    except exceptions.CosmosHttpResponseError as e:
-        print(f"Cosmos DB Error: {e}")
-        print("Firewall may be blocking your IP. Using in-memory storage instead.")
+        if use_cosmos:
+            logger.info("Connected to Cosmos DB successfully.")
+            print("Connected to Cosmos DB successfully.")
+        else:
+            logger.warning("Could not connect to any containers.")
+            print("Could not connect to any containers.")
+            
+        return client
     except Exception as e:
-        print(f"Failed to connect to Cosmos DB: {e}")
-        print("Using in-memory storage instead.")
+        logger.error(f"Failed to initialize Cosmos DB: {str(e)}")
+        use_cosmos = False
+        return None
 
+def get_container_client(container_name):
+    """
+    Get a container client for the specified container using the connection manager.
+    Following Azure best practices for connection management.
+    
+    Args:
+        container_name (str): The name of the container to access
+        
+    Returns:
+        ContainerProxy: The container client
+    """
+    try:
+        connection_manager = CosmosConnectionManager.get_instance()
+        return connection_manager.get_container(container_name)
+    except Exception as e:
+        logger.error(f"Failed to get container {container_name}: {str(e)}")
+        return None
+
+# Rest of your functions (get_next_number, save_policy_draft, etc.)
+# ...rest of the file continues...
+#            
 def get_next_number(field_name, container_ref=None, increment=10, default_start=100000):
     """Get the next sequential number for a field"""
     if use_cosmos and container_ref:
@@ -259,18 +286,28 @@ def get_mandatory_questions():
         return [q for q in in_memory_db["underwriting_questions"] if q.get("mandatory", False)]
 
 def get_coverage_with_demeter(demeter_agent, raw_json=None):
-    """Use Demeter's language skills to extract and enhance coverage options"""
+    """
+    Use Demeter's language skills to extract and enhance coverage options.
+    Following Azure AI best practices for robust AI integration.
     
+    Args:
+        demeter_agent: The agent to use for coverage extraction
+        raw_json: Optional pre-loaded JSON data
+        
+    Returns:
+        dict: Extracted coverage information, or None if extraction fails
+    """
     # Get the raw JSON if not provided
     if not raw_json:
         query = "SELECT * FROM c"
         result = query_cosmos(autopm_container, query)
         if result["status"] != "success":
+            logger.error("Failed to get raw data from Cosmos DB")
             print("Failed to get raw data from Cosmos DB")
             return None
         raw_json = result["data"]
     
-    # Format the prompt for Demeter
+    # Format the prompt with clear instructions
     prompt = """
     You're analyzing a product model JSON for an insurance application. Extract all coverage options.
     
@@ -316,48 +353,156 @@ def get_coverage_with_demeter(demeter_agent, raw_json=None):
     }
     ```
     
+    IMPORTANT: Your response should contain ONLY the JSON with no additional text before or after. The JSON must be valid and properly formatted.
+    
     JSON DATA TO ANALYZE:
     """ + json.dumps(raw_json, indent=2)
     
-    # Send to Demeter agent
-    try:
-        print("Asking Demeter to analyze coverage options...")
-        response = demeter_agent.generate_reply(messages=[{"role": "user", "content": prompt}])
-        
-        # Extract the JSON content from response
-        if isinstance(response, str):
-            response_content = response
-        else:
-            response_content = getattr(response, 'content', str(response))
+    # Send to Demeter agent with retry logic
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Sending request to Demeter agent (attempt {attempt + 1}/{max_retries})")
+            response = demeter_agent.generate_reply(messages=[{"role": "user", "content": prompt}])
             
-        json_start = response_content.find("```json")
-        json_end = response_content.rfind("```")
-        
-        if json_start >= 0 and json_end > json_start:
-            json_content = response_content[json_start + 7:json_end].strip()
-            coverage_data = json.loads(json_content)
-            print(f"Demeter successfully extracted coverage options")
-            return coverage_data
-        else:
-            print("Failed to extract valid JSON from Demeter's response")
-            return None
-    except Exception as e:
-        print(f"Error using Demeter for coverage extraction: {e}")
-        return None   
-
-def get_questions_with_mnemosyne(mnemosyne_agent, raw_json=None):
-    """Use Mnemosyne's language skills to extract and enhance underwriting questions"""
+            # Extract the content from the response object
+            if isinstance(response, str):
+                response_content = response
+            else:
+                response_content = getattr(response, 'content', str(response))
+            
+            # Use the robust extraction function
+            coverage_data = extract_json_from_llm_response(response_content)
+            
+            if coverage_data and isinstance(coverage_data, dict) and "coverageCategories" in coverage_data:
+                logger.info(f"Demeter successfully extracted coverage options")
+                print(f"Demeter successfully extracted coverage options")
+                return coverage_data
+            else:
+                logger.warning(f"Invalid response format from Demeter (attempt {attempt + 1})")
+                if attempt == max_retries - 1:
+                    logger.error("Failed to extract valid JSON after all retry attempts")
+                    print("Failed to extract valid JSON from Demeter's response")
+                    # Log a sample of the response for debugging
+                    sample = response_content[:200] + "..." if len(response_content) > 200 else response_content
+                    logger.error(f"Response sample: {sample}")
+        except Exception as e:
+            logger.error(f"Error using Demeter for coverage extraction (attempt {attempt + 1}): {str(e)}")
+            if attempt == max_retries - 1:
+                print(f"Error using Demeter for coverage extraction: {str(e)}")
+                return None
     
+    # Fallback to default coverage if extraction fails
+    logger.warning("Using fallback coverage due to extraction failure")
+    return get_default_coverage_data()
+
+def get_default_coverage_data():
+    """Return default coverage data when extraction fails"""
+    return {
+        "coverageCategories": [
+            {
+                "name": "Liability Coverages",
+                "description": "Protects you financially when you're responsible for injury to others or damage to their property",
+                "coverages": [
+                    {
+                        "name": "Bodily Injury Liability",
+                        "coverageCategory": "Liability",
+                        "mandatory": True,
+                        "explanation": "Covers medical expenses, lost wages, and legal fees if you injure someone in an accident",
+                        "termName": "Limit",
+                        "modelType": "Limit",
+                        "options": [
+                            {
+                                "label": "25/50",
+                                "display": "$25,000 per person / $50,000 per accident",
+                                "min": 25000,
+                                "max": 50000,
+                                "explanation": "Minimum coverage in most states"
+                            },
+                            {
+                                "label": "50/100",
+                                "display": "$50,000 per person / $100,000 per accident",
+                                "min": 50000,
+                                "max": 100000,
+                                "explanation": "Recommended standard coverage"
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
+
+
+def extract_json_from_llm_response(response_content):
+    """
+    Extract JSON from an LLM response using multiple strategies.
+    Following Azure best practices for robust parsing of AI responses.
+    
+    Args:
+        response_content (str): The raw response content from the LLM
+        
+    Returns:
+        dict or list: The extracted JSON object, or None if extraction fails
+    """
+    import re
+    import json
+    
+    # Strategy 1: Look for code fence markers
+    json_regex = r"```(?:json)?\s*([\s\S]*?)\s*```"
+    matches = re.findall(json_regex, response_content)
+    
+    for match in matches:
+        try:
+            return json.loads(match.strip())
+        except json.JSONDecodeError:
+            continue
+    
+    # Strategy 2: Look for JSON objects enclosed in brackets
+    try:
+        # Try to find JSON object pattern
+        object_match = re.search(r"\{[\s\S]*\}", response_content)
+        if object_match:
+            return json.loads(object_match.group(0))
+        
+        # Try to find JSON array pattern
+        array_match = re.search(r"\[[\s\S]*\]", response_content)
+        if array_match:
+            return json.loads(array_match.group(0))
+    except json.JSONDecodeError:
+        pass
+    
+    # Strategy 3: Try parsing the entire response as JSON
+    try:
+        return json.loads(response_content)
+    except json.JSONDecodeError:
+        pass
+    
+    # If all strategies fail, return None
+    return None
+def get_questions_with_mnemosyne(mnemosyne_agent, raw_json=None):
+    """
+    Use Mnemosyne's language skills to extract and enhance underwriting questions.
+    Following Azure AI best practices for robust AI integration.
+    
+    Args:
+        mnemosyne_agent: The agent to use for question extraction
+        raw_json: Optional pre-loaded JSON data
+        
+    Returns:
+        list: Extracted and enhanced questions, or None if extraction fails
+    """
     # Get the raw JSON if not provided
     if not raw_json:
         query = "SELECT * FROM c"
         result = query_cosmos(autopm_container, query)
         if result["status"] != "success":
+            logger.error("Failed to get raw data from Cosmos DB")
             print("Failed to get raw data from Cosmos DB")
             return None
         raw_json = result["data"]
     
-    # Format the prompt for Mnemosyne
+    # Format the prompt with clear instructions
     prompt = """
     You're analyzing a product model JSON for an insurance application. Extract all Pre-Qualification questions.
     
@@ -384,33 +529,81 @@ def get_questions_with_mnemosyne(mnemosyne_agent, raw_json=None):
     ]
     ```
     
+    IMPORTANT: Your response should contain ONLY the JSON array with no additional text before or after. The JSON must be valid and properly formatted.
+    
     JSON DATA TO ANALYZE:
     """ + json.dumps(raw_json, indent=2)
     
-    # Send to Mnemosyne agent
-    try:
-        response = mnemosyne_agent.generate_reply(messages=[{"role": "user", "content": prompt}])
-        
-        # Extract the JSON content from response
-        if isinstance(response, str):
-            response_content = response
-        else:
-            response_content = getattr(response, 'content', str(response))
+    # Send to Mnemosyne agent with retry logic
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Sending request to Mnemosyne agent (attempt {attempt + 1}/{max_retries})")
+            response = mnemosyne_agent.generate_reply(messages=[{"role": "user", "content": prompt}])
             
-        json_start = response_content.find("```json")
-        json_end = response_content.rfind("```")
-        
-        if json_start >= 0 and json_end > json_start:
-            json_content = response_content[json_start + 7:json_end].strip()
-            mnemosyne_questions = json.loads(json_content)
-            print(f"Mnemosyne successfully extracted {len(mnemosyne_questions)} questions")
-            return mnemosyne_questions
-        else:
-            print("Failed to extract valid JSON from Mnemosyne's response")
-            return None
-    except Exception as e:
-        print(f"Error using Mnemosyne for question extraction: {e}")
-        return None
+            # Extract the content from the response object
+            if isinstance(response, str):
+                response_content = response
+            else:
+                response_content = getattr(response, 'content', str(response))
+            
+            # Use the robust extraction function
+            mnemosyne_questions = extract_json_from_llm_response(response_content)
+            
+            if mnemosyne_questions and isinstance(mnemosyne_questions, list):
+                logger.info(f"Mnemosyne successfully extracted {len(mnemosyne_questions)} questions")
+                print(f"Mnemosyne successfully extracted {len(mnemosyne_questions)} questions")
+                return mnemosyne_questions
+            else:
+                logger.warning(f"Invalid response format from Mnemosyne (attempt {attempt + 1})")
+                if attempt == max_retries - 1:
+                    logger.error("Failed to extract valid JSON after all retry attempts")
+                    print("Failed to extract valid JSON from Mnemosyne's response")
+                    # Log a sample of the response for debugging
+                    sample = response_content[:200] + "..." if len(response_content) > 200 else response_content
+                    logger.error(f"Response sample: {sample}")
+        except Exception as e:
+            logger.error(f"Error using Mnemosyne for question extraction (attempt {attempt + 1}): {str(e)}")
+            if attempt == max_retries - 1:
+                print(f"Error using Mnemosyne for question extraction: {str(e)}")
+                return None
+    
+    # Fallback to default questions if extraction fails
+    logger.warning("Using fallback questions due to extraction failure")
+    return get_default_questions()
+
+def get_default_questions():
+    """Return default questions when extraction fails"""
+    return [
+        {
+            "id": "UW001",
+            "text": "Has the driver had a license for at least 3 years?",
+            "order": 1,
+            "action": "Review",
+            "explanation": "Drivers with less experience may present higher risk",
+            "enhanced_explanation": "Having at least 3 years of driving experience helps establish a driving history and may qualify you for better rates.",
+            "possibleAnswers": ["Yes", "No"]
+        },
+        {
+            "id": "UW002",
+            "text": "Is the vehicle free of modifications not approved by the manufacturer?",
+            "order": 2,
+            "action": "Review",
+            "explanation": "Modified vehicles may have different risk profiles",
+            "enhanced_explanation": "Vehicle modifications can affect performance, safety, and repair costs. Factory-standard vehicles are easier to insure.",
+            "possibleAnswers": ["Yes", "No"]
+        },
+        {
+            "id": "UW003", 
+            "text": "Has the driver been free of DUI convictions in the past 5 years?",
+            "order": 3,
+            "action": "Decline",
+            "explanation": "DUI convictions indicate higher risk",
+            "enhanced_explanation": "A history free of driving under the influence convictions is important for insurance eligibility.",
+            "possibleAnswers": ["Yes", "No"]
+        }
+    ]
+
 def save_with_eligibility(policy_data, eligibility, reason=None):
     """Save policy data with eligibility information"""
     # Add eligibility information to policy data

@@ -21,7 +21,7 @@ load_dotenv("x1.env")
 
 # Azure OpenAI configuration
 openai_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
-openai_api_key = os.getenv("AZURE_OPENAI_API_KEY")
+openai_api_key = os.getenv("AZURE_OPENAI_API_KEY_X1")
 api_version = os.getenv("AZURE_OPENAI_API_VERSION", "2024-02-01")
 embedding_model = os.getenv("AZURE_OPENAI_EMBEDDING_MODEL", "text-embedding-3-large")
 embedding_deployment = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "text-embedding-3-large")
@@ -29,6 +29,17 @@ embedding_deployment = os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT", "text-embe
 # GPT-4o configuration from x1.env
 gpt4o_deployment = os.getenv("AZURE_OPENAI_GPT4O_DEPLOYMENT", "gpt-4o") 
 gpt4o_model = os.getenv("AZURE_OPENAI_GPT4O_MODEL", "gpt-4o")
+
+# Replace the existing print statements with OpenAI-focused output
+print("\n=== AZURE OPENAI CONFIGURATION ===")
+print(f"Endpoint:               {openai_endpoint if openai_endpoint else 'NOT SET'}")
+print(f"API Version:            {api_version}")
+print(f"API Key:                {'Configured' if openai_api_key else 'NOT CONFIGURED'}")
+print(f"Embedding Model:        {embedding_model}")
+print(f"Embedding Deployment:   {embedding_deployment}")
+print(f"GPT-4o Model:           {gpt4o_model}")
+print(f"GPT-4o Deployment:      {gpt4o_deployment}")
+print("================================\n")
 
 # Cosmos DB configuration
 cosmos_endpoint = os.getenv("COSMOS_ENDPOINT")

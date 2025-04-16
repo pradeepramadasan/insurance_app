@@ -1,6 +1,11 @@
 import sys
+import logging
 from workflow.process import process_insurance_request  # Changed from insurance_app.workflow.process
 from db.cosmos_db import init_cosmos_db  # Changed from insurance_app.db.cosmos_db
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
 
 def main():
     """Main entry point for the insurance application"""

@@ -2,6 +2,17 @@ from autogen import AssistantAgent
 from config import config_list_gpt4o
 import json
 from db.cosmos_db import get_mandatory_questions, save_underwriting_responses
+# Update the import to use the correct class name
+from agents.hera import HeraAgent
+
+# Initialize Hera when needed with correct class name
+hera_agent = HeraAgent()
+
+# Call Hera with standardized data format
+def get_recommendations(customer_data):
+    # The source parameter identifies which agent is making the call
+    result = hera_agent.get_recommendations(customer_data, source="mnemosyne")
+    return result
 
 def create_mnemosyne_agent():
     """Create and return the Mnemosyne (Profile) agent"""
