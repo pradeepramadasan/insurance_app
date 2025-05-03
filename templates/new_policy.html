@@ -1,0 +1,637 @@
+{% extends "base.html" %}
+
+{% block title %}New Policy{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Agent Panel (Left Side) -->
+    <div class="col-md-3">
+        <div class="card agent-card sticky-top" style="top: 20px;">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-0">Your Agent</h4>
+            </div>
+            <div class="card-body text-center">
+                <img src="{{ url_for('static', filename='img/' + agent + '.png') }}" 
+                     alt="{{ agent|capitalize }}" 
+                     class="agent-avatar img-fluid rounded-circle mb-3"
+                     onerror="this.src='{{ url_for('static', filename='img/default_agent.png') }}'">
+                <h4 class="agent-name">{{ agent|capitalize }}</h4>
+                <div class="agent-role mb-3">
+                    {% if agent == 'iris' %}
+                        Customer Information Specialist
+                    {% elif agent == 'mnemosyne' %}
+                        Data Collection Expert
+                    {% elif agent == 'hera' %}
+                        Risk Analysis Specialist
+                    {% elif agent == 'demeter' %}
+                        Coverage Design Expert
+                    {% elif agent == 'apollo' %}
+                        Policy Documentation Specialist
+                    {% elif agent == 'calliope' %}
+                        Document Enhancement Expert
+                    {% elif agent == 'charon' %}
+                        Payment Processing Agent
+                    {% elif agent == 'hermes' %}
+                        Policy Issuance Specialist
+                    {% elif agent == 'zeus' %}
+                        Senior Policy Oversight
+                    {% else %}
+                        Insurance Assistant
+                    {% endif %}
+                </div>
+                <div class="agent-status">
+                    <span class="badge bg-success status-indicator">Active</span>
+                </div>
+            </div>
+            <div class="card-footer">
+                <div class="agent-message p-2 rounded bg-light">
+                    {{ agent_message }}
+                </div>
+            </div>
+        </div>
+
+        <!-- Workflow Progress -->
+        <div class="card mt-3">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">Policy Creation Progress</h5>
+            </div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush workflow-steps">
+                    <li class="list-group-item {% if step >= 1 %}active{% endif %}">
+                        <i class="bi {% if step > 1 %}bi-check-circle-fill{% elif step == 1 %}bi-circle-fill{% else %}bi-circle{% endif %}"></i>
+                        Basic Information
+                    </li>
+                    <li class="list-group-item {% if step >= 2 %}active{% endif %}">
+                        <i class="bi {% if step > 2 %}bi-check-circle-fill{% elif step == 2 %}bi-circle-fill{% else %}bi-circle{% endif %}"></i>
+                        Vehicle & Driving Details
+                    </li>
+                    <li class="list-group-item {% if step >= 3 %}active{% endif %}">
+                        <i class="bi {% if step > 3 %}bi-check-circle-fill{% elif step == 3 %}bi-circle-fill{% else %}bi-circle{% endif %}"></i>
+                        Risk Assessment
+                    </li>
+                    <li class="list-group-item {% if step >= 4 %}active{% endif %}">
+                        <i class="bi {% if step > 4 %}bi-check-circle-fill{% elif step == 4 %}bi-circle-fill{% else %}bi-circle{% endif %}"></i>
+                        Coverage Design
+                    </li>
+                    <li class="list-group-item {% if step >= 5 %}active{% endif %}">
+                        <i class="bi {% if step > 5 %}bi-check-circle-fill{% elif step == 5 %}bi-circle-fill{% else %}bi-circle{% endif %}"></i>
+                        Policy Draft
+                    </li>
+                    <li class="list-group-item {% if step >= 6 %}active{% endif %}">
+                        <i class="bi {% if step > 6 %}bi-check-circle-fill{% elif step == 6 %}bi-circle-fill{% else %}bi-circle{% endif %}"></i>
+                        Document Finalization
+                    </li>
+                    <li class="list-group-item {% if step >= 7 %}active{% endif %}">
+                        <i class="bi {% if step > 7 %}bi-check-circle-fill{% elif step == 7 %}bi-circle-fill{% else %}bi-circle{% endif %}"></i>
+                        Payment Processing
+                    </li>
+                    <li class="list-group-item {% if step >= 8 %}active{% endif %}">
+                        <i class="bi {% if step > 8 %}bi-check-circle-fill{% elif step == 8 %}bi-circle-fill{% else %}bi-circle{% endif %}"></i>
+                        Policy Issuance
+                    </li>
+                    <li class="list-group-item {% if step >= 9 %}active{% endif %}">
+                        <i class="bi {% if step > 9 %}bi-check-circle-fill{% elif step == 9 %}bi-circle-fill{% else %}bi-circle{% endif %}"></i>
+                        Summary & Confirmation
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content (Right Side) -->
+    <div class="col-md-9">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h3 class="mb-0">
+                    {% if step == 1 %}
+                        Step 1: Basic Information
+                    {% elif step == 2 %}
+                        Step 2: Vehicle & Driving Details
+                    {% elif step == 3 %}
+                        Step 3: Risk Assessment
+                    {% elif step == 4 %}
+                        Step 4: Coverage Design
+                    {% elif step == 5 %}
+                        Step 5: Policy Draft
+                    {% elif step == 6 %}
+                        Step 6: Document Finalization
+                    {% elif step == 7 %}
+                        Step 7: Payment Processing
+                    {% elif step == 8 %}
+                        Step 8: Policy Issuance
+                    {% elif step == 9 %}
+                        Step 9: Summary & Confirmation
+                    {% else %}
+                        New Policy Application
+                    {% endif %}
+                </h3>
+            </div>
+            <div class="card-body">
+                {% if error %}
+                <div class="alert alert-danger">{{ error }}</div>
+                {% endif %}
+
+                <form method="post" id="policyForm" enctype="multipart/form-data">
+                    <!-- Dynamic content based on the current step -->
+                    {% if step == 1 %}
+                        <!-- Basic Information Step (Iris) -->
+                        <div class="mb-3">
+                            <label for="customerFile" class="form-label">Upload Customer Information (Optional)</label>
+                            <input type="file" class="form-control" id="customerFile" name="customerFile">
+                            <div class="form-text">Upload an existing document with your information, or fill out the form below.</div>
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="fullName" class="form-label">Full Name</label>
+                                <input type="text" class="form-control" id="fullName" name="fullName" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label for="dateOfBirth" class="form-label">Date of Birth</label>
+                                <input type="date" class="form-control" id="dateOfBirth" name="dateOfBirth" required>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="email" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="email" name="email" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="phoneNumber" class="form-label">Phone Number</label>
+                            <input type="tel" class="form-control" id="phoneNumber" name="phoneNumber" required>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="address" class="form-label">Address</label>
+                            <textarea class="form-control" id="address" name="address" rows="3" required></textarea>
+                        </div>
+
+                    {% elif step == 2 %}
+                        <!-- Vehicle & Driving Details (Mnemosyne) -->
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label for="vehicleMake" class="form-label">Vehicle Make</label>
+                                <input type="text" class="form-control" id="vehicleMake" name="vehicleMake" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="vehicleModel" class="form-label">Vehicle Model</label>
+                                <input type="text" class="form-control" id="vehicleModel" name="vehicleModel" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="vehicleYear" class="form-label">Year</label>
+                                <input type="number" class="form-control" id="vehicleYear" name="vehicleYear" min="1950" max="2025" required>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="vin" class="form-label">VIN (Vehicle Identification Number)</label>
+                            <input type="text" class="form-control" id="vin" name="vin">
+                        </div>
+
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label for="violations" class="form-label">Moving Violations (Last 3 Years)</label>
+                                <input type="number" class="form-control" id="violations" name="violations" min="0" value="0" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="accidents" class="form-label">Accidents (Last 3 Years)</label>
+                                <input type="number" class="form-control" id="accidents" name="accidents" min="0" value="0" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="yearsLicensed" class="form-label">Years Licensed</label>
+                                <input type="number" class="form-control" id="yearsLicensed" name="yearsLicensed" min="0" required>
+                            </div>
+                        </div>
+
+                    {% elif step == 3 %}
+                        <!-- Risk Assessment (Hera) -->
+                        <div class="alert alert-info">
+                            <h5>Risk Assessment in Progress</h5>
+                            <p>Hera is analyzing your information to determine risk factors and recommend appropriate coverage options.</p>
+                            <div class="progress">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" id="riskProgress" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <div id="riskResults" class="mt-4" style="display:none;">
+                            <h5>Risk Assessment Results</h5>
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="card bg-light">
+                                        <div class="card-body text-center">
+                                            <h6>Overall Risk Level</h6>
+                                            <span class="display-6">Medium</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-8">
+                                    <div class="card bg-light">
+                                        <div class="card-body">
+                                            <h6>Risk Factors</h6>
+                                            <ul id="riskFactors">
+                                                <li>3 years driving experience (Medium)</li>
+                                                <li>No recent accidents (Low)</li>
+                                                <li>Vehicle model year (Low)</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    {% elif step == 4 %}
+                        <!-- Coverage Design (Demeter) -->
+                        <h4>Mandatory Coverages</h4>
+                        <div class="card mb-4">
+                            <div class="card-body">
+                                <div class="row mb-3">
+                                    <label class="col-sm-4">Bodily Injury Liability</label>
+                                    <div class="col-sm-8">
+                                        <select class="form-select" name="bodilyInjuryLimit" required>
+                                            <option value="25000/50000">$25,000/$50,000</option>
+                                            <option value="50000/100000" selected>$50,000/$100,000</option>
+                                            <option value="100000/300000">$100,000/$300,000</option>
+                                            <option value="250000/500000">$250,000/$500,000</option>
+                                        </select>
+                                        <div class="form-text">Per person/Per accident maximum</div>
+                                    </div>
+                                </div>
+                                <div class="row mb-3">
+                                    <label class="col-sm-4">Property Damage Liability</label>
+                                    <div class="col-sm-8">
+                                        <select class="form-select" name="propertyDamageLimit" required>
+                                            <option value="25000">$25,000</option>
+                                            <option value="50000" selected>$50,000</option>
+                                            <option value="100000">$100,000</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <label class="col-sm-4">Uninsured Motorist</label>
+                                    <div class="col-sm-8">
+                                        <select class="form-select" name="uninsuredMotoristLimit" required>
+                                            <option value="25000/50000">$25,000/$50,000</option>
+                                            <option value="50000/100000" selected>$50,000/$100,000</option>
+                                            <option value="100000/300000">$100,000/$300,000</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <h4>Optional Coverages</h4>
+                        <div class="card">
+                            <div class="card-body">
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="collision" name="collision" checked>
+                                    <label class="form-check-label" for="collision">Collision Coverage</label>
+                                    <div class="collapse show" id="collisionOptions">
+                                        <div class="card card-body bg-light mt-2">
+                                            <div class="row">
+                                                <label class="col-sm-4">Deductible</label>
+                                                <div class="col-sm-8">
+                                                    <select class="form-select" name="collisionDeductible">
+                                                        <option value="500" selected>$500</option>
+                                                        <option value="1000">$1,000</option>
+                                                        <option value="2000">$2,000</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="comprehensive" name="comprehensive" checked>
+                                    <label class="form-check-label" for="comprehensive">Comprehensive Coverage</label>
+                                    <div class="collapse show" id="comprehensiveOptions">
+                                        <div class="card card-body bg-light mt-2">
+                                            <div class="row">
+                                                <label class="col-sm-4">Deductible</label>
+                                                <div class="col-sm-8">
+                                                    <select class="form-select" name="comprehensiveDeductible">
+                                                        <option value="500" selected>$500</option>
+                                                        <option value="1000">$1,000</option>
+                                                        <option value="2000">$2,000</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="form-check mb-3">
+                                    <input class="form-check-input" type="checkbox" id="rentalReimbursement" name="rentalReimbursement">
+                                    <label class="form-check-label" for="rentalReimbursement">Rental Reimbursement</label>
+                                </div>
+
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="roadside" name="roadside">
+                                    <label class="form-check-label" for="roadside">Roadside Assistance</label>
+                                </div>
+                            </div>
+                        </div>
+
+                    {% elif step == 5 %}
+                        <!-- Policy Draft (Apollo) -->
+                        <div class="alert alert-info mb-4">
+                            <h5>Policy Draft in Progress</h5>
+                            <p>Apollo is preparing your policy documents based on your coverage selections.</p>
+                            <div class="progress">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" id="draftProgress" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <div id="policyDraft" class="mt-4" style="display:none;">
+                            <div class="card">
+                                <div class="card-header">
+                                    <h5>Policy Draft Preview</h5>
+                                </div>
+                                <div class="card-body">
+                                    <pre class="policy-document">AUTO INSURANCE POLICY
+Policy Number: DRAFT-12345
+
+DECLARATIONS PAGE
+
+Named Insured: John Doe
+Address: 123 Main Street, Anytown, USA
+
+Policy Period: 05/01/2025 to 05/01/2026
+
+Covered Vehicle:
+2020 Honda CRV
+VIN: 1HGCM82633A123456
+
+COVERAGES AND LIMITS:
+
+LIABILITY COVERAGES:
+- Bodily Injury: $50,000 per person / $100,000 per accident
+- Property Damage: $50,000 per accident
+- Uninsured Motorist: $50,000 per person / $100,000 per accident
+
+PHYSICAL DAMAGE COVERAGES:
+- Collision: Included - $500 deductible
+- Comprehensive: Included - $500 deductible
+- Rental Reimbursement: Not Included
+- Roadside Assistance: Not Included
+
+TOTAL 6-MONTH PREMIUM: $750.00
+                                    </pre>
+                                </div>
+                            </div>
+                        </div>
+
+                    {% elif step == 6 %}
+                        <!-- Document Finalization (Calliope) -->
+                        <div class="alert alert-info mb-4">
+                            <h5>Document Enhancement in Progress</h5>
+                            <p>Calliope is polishing your policy document to ensure clarity and completeness.</p>
+                            <div class="progress">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated bg-info" role="progressbar" id="enhanceProgress" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <div id="enhancedDocument" class="mt-4" style="display:none;">
+                            <div class="card mb-3">
+                                <div class="card-header">
+                                    <h5>Final Policy Document</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="document-enhancements">
+                                        <span class="badge bg-success me-2">Simplified Language</span>
+                                        <span class="badge bg-success me-2">Added Definitions</span>
+                                        <span class="badge bg-success">Improved Formatting</span>
+                                    </div>
+                                    <div class="mt-3">
+                                        <button type="button" class="btn btn-outline-primary">View Full Document</button>
+                                        <button type="button" class="btn btn-outline-secondary">Download PDF</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    {% elif step == 7 %}
+                        <!-- Payment Processing (Charon) -->
+                        <div class="alert alert-warning mb-4">
+                            <strong>This is a simulation.</strong> No actual payment will be processed.
+                        </div>
+
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h5>Premium Summary</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h6>Base Premium:</h6>
+                                        <h6>Discounts:</h6>
+                                        <h6>Fees:</h6>
+                                        <h6 class="fw-bold">Total 6-Month Premium:</h6>
+                                    </div>
+                                    <div class="col-md-6 text-end">
+                                        <h6>$800.00</h6>
+                                        <h6>-$100.00</h6>
+                                        <h6>$50.00</h6>
+                                        <h6 class="fw-bold">$750.00</h6>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <h5>Payment Options</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row mb-3">
+                                    <label class="col-sm-4">Payment Plan</label>
+                                    <div class="col-sm-8">
+                                        <select class="form-select" name="paymentPlan" required>
+                                            <option value="full">Pay in Full: $750.00</option>
+                                            <option value="quarterly">Quarterly: $195.00 x 4</option>
+                                            <option value="monthly">Monthly: $130.00 x 6</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="row mb-3">
+                                    <label class="col-sm-4">Payment Method</label>
+                                    <div class="col-sm-8">
+                                        <select class="form-select" name="paymentMethod" required>
+                                            <option value="creditCard">Credit/Debit Card</option>
+                                            <option value="bankAccount">Bank Account</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- Payment details would go here (simulated) -->
+                                <div class="alert alert-info">
+                                    In a real application, secure payment fields would appear here.
+                                </div>
+                            </div>
+                        </div>
+
+                    {% elif step == 8 %}
+                        <!-- Policy Issuance (Hermes) -->
+                        <div class="alert alert-info mb-4">
+                            <h5>Policy Issuance in Progress</h5>
+                            <p>Hermes is finalizing your policy and assigning your official policy number.</p>
+                            <div class="progress">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" role="progressbar" id="issuanceProgress" style="width: 0%"></div>
+                            </div>
+                        </div>
+
+                        <div id="issuanceComplete" class="mt-4" style="display:none;">
+                            <div class="card text-center">
+                                <div class="card-body">
+                                    <i class="bi bi-check-circle-fill text-success" style="font-size: 48px;"></i>
+                                    <h4 class="mt-3">Policy Successfully Issued!</h4>
+                                    <p class="lead">Your policy number is: <strong>POL-123456</strong></p>
+                                    <p>Effective Date: May 1, 2025 - May 1, 2026</p>
+                                    <p>Your policy documents have been emailed to you and are available in your account.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                    {% elif step == 9 %}
+                        <!-- Summary & Confirmation (Zeus) -->
+                        <div class="alert alert-success mb-4">
+                            <h4><i class="bi bi-check-circle-fill"></i> Congratulations!</h4>
+                            <p class="mb-0">Your policy has been successfully created and is now active.</p>
+                        </div>
+
+                        <div class="card mb-4">
+                            <div class="card-header bg-primary text-white">
+                                <h5 class="mb-0">Policy Summary</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row mb-2">
+                                    <div class="col-md-4 fw-bold">Policy Number:</div>
+                                    <div class="col-md-8">POL-123456</div>
+                                </div>
+                                <div class="row mb-2">
+                                    <div class="col-md-4 fw-bold">Effective Period:</div>
+                                    <div class="col-md-8">May 1, 2025 - May 1, 2026</div>
+                                </div>
+                                <div class="row mb-2">
+                                    <div class="col-md-4 fw-bold">Insured:</div>
+                                    <div class="col-md-8">John Doe</div>
+                                </div>
+                                <div class="row mb-2">
+                                    <div class="col-md-4 fw-bold">Vehicle:</div>
+                                    <div class="col-md-8">2020 Honda CRV</div>
+                                </div>
+                                <div class="row mb-4">
+                                    <div class="col-md-4 fw-bold">Premium:</div>
+                                    <div class="col-md-8">$750.00 (6 months)</div>
+                                </div>
+                                
+                                <h6 class="fw-bold">Key Coverages:</h6>
+                                <ul>
+                                    <li>Bodily Injury: $50,000/$100,000</li>
+                                    <li>Property Damage: $50,000</li>
+                                    <li>Collision: $500 deductible</li>
+                                    <li>Comprehensive: $500 deductible</li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header">
+                                <h5>Next Steps</h5>
+                            </div>
+                            <div class="card-body">
+                                <ol>
+                                    <li>You will receive your policy documents via email within 24 hours.</li>
+                                    <li>ID cards can be printed from your online account or will arrive by mail.</li>
+                                    <li>Set up online account access using the link sent to your email.</li>
+                                    <li>Download our mobile app for easy access to your policy on the go.</li>
+                                </ol>
+                            </div>
+                        </div>
+                    {% endif %}
+
+                    <!-- Navigation Buttons -->
+                    <div class="d-flex justify-content-between mt-4">
+                        {% if step > 1 %}
+                        <button type="submit" name="action" value="back" class="btn btn-secondary">Back</button>
+                        {% else %}
+                        <button type="button" class="btn btn-secondary" disabled>Back</button>
+                        {% endif %}
+                        
+                        {% if step < 9 %}
+                        <button type="submit" name="action" value="next" class="btn btn-primary">Next</button>
+                        {% else %}
+                        <a href="/" class="btn btn-success">Complete</a>
+                        {% endif %}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Simulate progress bars for agent processing steps
+    if (document.getElementById('riskProgress')) {
+        simulateProgress('riskProgress', 'riskResults', 3000);
+    }
+    if (document.getElementById('draftProgress')) {
+        simulateProgress('draftProgress', 'policyDraft', 4000);
+    }
+    if (document.getElementById('enhanceProgress')) {
+        simulateProgress('enhanceProgress', 'enhancedDocument', 2500);
+    }
+    if (document.getElementById('issuanceProgress')) {
+        simulateProgress('issuanceProgress', 'issuanceComplete', 3500);
+    }
+
+    // Toggle optional coverage details
+    document.querySelectorAll('.form-check-input').forEach(function(checkbox) {
+        checkbox.addEventListener('change', function() {
+            const targetId = this.id + 'Options';
+            const targetElem = document.getElementById(targetId);
+            if (targetElem) {
+                if (this.checked) {
+                    if (targetElem.classList.contains('collapse')) {
+                        new bootstrap.Collapse(targetElem, { show: true });
+                    } else {
+                        targetElem.style.display = 'block';
+                    }
+                } else {
+                    if (targetElem.classList.contains('collapse')) {
+                        new bootstrap.Collapse(targetElem, { hide: true });
+                    } else {
+                        targetElem.style.display = 'none';
+                    }
+                }
+            }
+        });
+    });
+});
+
+// Helper function to simulate progress bars
+function simulateProgress(progressBarId, resultsDivId, duration) {
+    const progressBar = document.getElementById(progressBarId);
+    const resultsDiv = document.getElementById(resultsDivId);
+    let width = 0;
+    
+    const interval = setInterval(function() {
+        if (width >= 100) {
+            clearInterval(interval);
+            if (resultsDiv) {
+                resultsDiv.style.display = 'block';
+            }
+        } else {
+            width += 2;
+            progressBar.style.width = width + '%';
+            progressBar.setAttribute('aria-valuenow', width);
+        }
+    }, duration / 50);
+}
+</script>
+{% endblock %}

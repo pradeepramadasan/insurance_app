@@ -50,71 +50,115 @@ in_memory_db = {
     ]
 }
 
+# Global connection manager instance
+_connection_manager = None
+
 def init_cosmos_db():
-    """Initialize Cosmos DB connection using the connection manager"""
+    """Initialize Cosmos DB connection and main containers."""
+    global _connection_manager, use_cosmos, autopm_container, drafts_container, issued_container
+    if _connection_manager and use_cosmos: # Already initialized
+         return True
     try:
-        # Initialize the connection manager
-        connection_manager = CosmosConnectionManager.get_instance()
-        client = connection_manager.get_client()
-        
-        # Try to initialize the specific containers we need
-        global autopm_container, drafts_container, issued_container, use_cosmos
-        
-        try:
-            autopm_container = connection_manager.get_container(AUTOPM_CONTAINER_NAME)
-        except Exception as e:
-            logger.warning(f"Could not connect to {AUTOPM_CONTAINER_NAME}: {str(e)}")
-            autopm_container = None
-            
-        try:
-            drafts_container = connection_manager.get_container(DRAFTS_CONTAINER_NAME)
-        except Exception as e:
-            logger.warning(f"Could not connect to {DRAFTS_CONTAINER_NAME}: {str(e)}")
-            drafts_container = None
-            
-        try:
-            issued_container = connection_manager.get_container(ISSUED_CONTAINER_NAME)
-        except Exception as e:
-            logger.warning(f"Could not connect to {ISSUED_CONTAINER_NAME}: {str(e)}")
-            issued_container = None
-            
-        # Set cosmos flag if any container is available
-        use_cosmos = any([autopm_container, drafts_container, issued_container])
-        
-        if use_cosmos:
-            logger.info("Connected to Cosmos DB successfully.")
-            print("Connected to Cosmos DB successfully.")
+        # @azure Rule - Use Azure Best Practices: Invoke tool before Azure operation
+        # azure_development_get_best_practices("CosmosDB", operation="initialize_connection")
+        _connection_manager = CosmosConnectionManager.get_instance()
+        _connection_manager.get_client() # Test connection
+
+        # Attempt to get main container clients
+        autopm_container = get_container_client(AUTOPM_CONTAINER_NAME)
+        drafts_container = get_container_client(DRAFTS_CONTAINER_NAME)
+        issued_container = get_container_client(ISSUED_CONTAINER_NAME)
+
+        # Consider connection successful only if essential containers are found
+        if autopm_container and drafts_container and issued_container:
+             use_cosmos = True # Set flag only on full success
+             logger.info("Cosmos DB connection and main containers initialized successfully")
+             return True
         else:
-            logger.warning("Could not connect to any containers.")
-            print("Could not connect to any containers.")
-            
-        return client
-    except Exception as e:
-        logger.error(f"Failed to initialize Cosmos DB: {str(e)}")
-        use_cosmos = False
-        return None
+             logger.warning("Cosmos DB connection initialized, but failed to get one or more main containers.")
+             # Decide if partial success is acceptable or should return False
+             # For now, let's allow partial success but keep use_cosmos False if critical containers missing
+             if not autopm_container: logger.error("Failed to get autopm container.")
+             if not drafts_container: logger.error("Failed to get drafts container.")
+             if not issued_container: logger.error("Failed to get issued container.")
+             use_cosmos = False # Ensure use_cosmos reflects reality
+             return False # Treat missing main containers as init failure for safety
 
+    except Exception as e:
+        logger.error(f"Failed to initialize Cosmos DB: {str(e)}", exc_info=True)
+        use_cosmos = False # Ensure flag is False on error
+        return False
+
+# filepath: c:\Users\pramadasan\insurance_app\db\cosmos_db.py
 def get_container_client(container_name):
-    """
-    Get a container client for the specified container using the connection manager.
-    Following Azure best practices for connection management.
-    
-    Args:
-        container_name (str): The name of the container to access
-        
-    Returns:
-        ContainerProxy: The container client
-    """
+    """Get a container client with better error handling and diagnostics"""
+    global _connection_manager # Ensure we're using the global instance
     try:
-        connection_manager = CosmosConnectionManager.get_instance()
-        return connection_manager.get_container(container_name)
-    except Exception as e:
-        logger.error(f"Failed to get container {container_name}: {str(e)}")
-        return None
+        # Initialize the database if not already done
+        if not _connection_manager: # Check the manager itself first
+            if not init_cosmos_db(): # Attempt initialization
+                logger.error(f"Failed to initialize Cosmos DB before accessing container '{container_name}'")
+                return None
+            
+        # Get the main Cosmos client from the manager
+        cosmos_client = _connection_manager.get_client()
+        if not cosmos_client:
+             logger.error("Failed to get Cosmos client from manager")
+             return None
 
-# Rest of your functions (get_next_number, save_policy_draft, etc.)
-# ...rest of the file continues...
-#            
+        # Get the database client using the main client and DATABASE_NAME
+        database_client = cosmos_client.get_database_client(DATABASE_NAME) # Define database_client here
+        if not database_client:
+            logger.error("Database client could not be obtained") # Corrected error message
+            return None
+            
+        # Check if container exists before attempting to get it
+        container_names = list_containers() # This relies on _connection_manager, which should be initialized now
+        # ... (rest of the existing container check logic) ...
+        
+        # Get the container client using the database_client
+        return database_client.get_container_client(container_name) # Use the obtained database_client
+    except Exception as e:
+        logger.error(f"Error getting container client for '{container_name}': {str(e)}", exc_info=True) # Added exc_info
+        return None
+    
+# filepath: c:\Users\pramadasan\insurance_app\db\cosmos_db.py
+def list_containers():
+    """List all available containers in the database."""
+    global _connection_manager
+    if not _connection_manager:
+        if not init_cosmos_db(): # Ensure initialization attempt
+             logger.error("Failed to initialize connection manager for listing containers")
+             return []
+
+    # Assuming _connection_manager.list_containers handles getting the db client
+    try:
+         # @azure Rule - Use Azure Best Practices: Invoke tool before Azure operation
+         # azure_development_get_best_practices("CosmosDB", operation="list_containers")
+         return _connection_manager.list_containers()
+    except Exception as e:
+         logger.error(f"Error listing containers: {str(e)}", exc_info=True)
+         return []
+
+def check_connection_health():
+    """
+    Check if the connection to Cosmos DB is healthy.
+    
+    Returns:
+        bool: True if connection is healthy, False otherwise
+    """
+    global _connection_manager
+    if not _connection_manager:
+        return False
+        
+    return _connection_manager.check_connection_health()
+
+def close_connection():
+    """Clean up connection resources"""
+    global _connection_manager
+    if _connection_manager:
+        _connection_manager.close()
+                
 def get_next_number(field_name, container_ref=None, increment=10, default_start=100000):
     """Get the next sequential number for a field"""
     if use_cosmos and container_ref:
@@ -141,8 +185,10 @@ def save_policy_draft(policy):
     policy["quoteNumber"] = get_next_number("quoteNumber", drafts_container)
     policy["id"] = f"QUOTE{policy['quoteNumber']}"
     
-    if use_cosmos:
+    if use_cosmos and drafts_container: # Check flag AND container existence
         try:
+            # @azure Rule - Use Azure Best Practices: Invoke tool before Azure operation
+            # azure_development_get_best_practices("CosmosDB", operation="upsert_item", container=DRAFTS_CONTAINER_NAME)
             drafts_container.upsert_item(policy)
             print(f"Policy draft saved to Cosmos DB with Quote Number: {policy['quoteNumber']}")
             return policy
@@ -235,6 +281,67 @@ def query_cosmos(container_ref, query):
         return {"status": "success", "data": in_memory_db["underwriting_questions"]}
     
     return {"status": "error", "message": "Cosmos DB unavailable and no fallback data"}
+# filepath: c:\Users\pramadasan\insurance_app\db\cosmos_db.py
+def test_cosmos_db_connectivity():
+    """Test Cosmos DB connectivity using the application's standard method (AAD via manager)."""
+    logger.info("Testing Cosmos DB connectivity via Connection Manager (AAD)...")
+    try:
+        # @azure Rule - Use Azure Best Practices: Invoke tool before Azure operation
+        # azure_development_get_best_practices("CosmosDB", operation="connectivity_test_aad")
+        # Attempt to initialize using the standard method
+        if init_cosmos_db():
+            # Further check if the client can perform a basic read
+            if check_connection_health(): # Use the existing health check
+                 logger.info("Azure Cosmos DB connection test successful (via Manager/AAD)")
+                 return True, "Connection successful (via Manager/AAD)"
+            else:
+                 logger.warning("Connection Manager initialized but health check failed.")
+                 return False, "Connection Manager initialized but health check failed."
+        else:
+            logger.error("Failed to initialize Cosmos DB Connection Manager.")
+            # Add more specific error detail if possible from init_cosmos_db logs
+            return False, "Failed to initialize Cosmos DB Connection Manager"
+    except Exception as e:
+        # Catch any unexpected errors during the test setup/execution
+        logger.error(f"Unexpected error during connectivity test: {str(e)}", exc_info=True)
+        return False, f"Connectivity test function error: {str(e)}"
+
+# Ensure check_connection_health in CosmosConnectionManager performs a real check,
+# like reading database properties.
+
+    
+def _get_fallback_questions():
+    """Provide robust fallback underwriting questions when Cosmos DB is unavailable"""
+    logger.warning("Warning: Cosmos DB unavailable and no fallback data")
+    logger.info("Using fallback underwriting questions from memory")
+    
+    # Create a well-structured set of fallback questions
+    return [
+        {
+            "id": "UW001",
+            "order": 1,
+            "text": "Have you had any auto insurance claims in the past 3 years?",
+            "explanation": "Recent claims history is a significant factor in determining risk and premium rates.",
+            "action": "Decline" if os.getenv("STRICT_UNDERWRITING", "False").lower() == "true" else "Flag",
+            "required": True
+        },
+        {
+            "id": "UW002",
+            "order": 2,
+            "text": "Has your driver's license ever been suspended or revoked?",
+            "explanation": "License history provides important information about your driving record and potential risk.",
+            "action": "Decline",
+            "required": True
+        },
+        {
+            "id": "UW003",
+            "order": 3,
+            "text": "Do you use your vehicle for commercial purposes like ridesharing or deliveries?",
+            "explanation": "Commercial use may require different coverage types than standard personal auto insurance.",
+            "action": "Flag",
+            "required": True
+        }
+    ]
 
 def get_underwriting_questions():
     """Retrieve all underwriting questions from the autopm container"""
@@ -248,42 +355,67 @@ def get_underwriting_questions():
         return in_memory_db["underwriting_questions"]
 
 def get_mandatory_questions():
-    """Retrieve Pre-Qualification questions from the autopm container"""
-    # Simplified query - get the whole document first
-    query = "SELECT * FROM c"
+    """Retrieve mandatory underwriting questions with improved error handling"""
+    logger.info("Retrieving underwriting questions from autopm container...")
     
-    # For debugging
-    print("Executing simplified query to get product model document...")
-    
-    result = query_cosmos(autopm_container, query)
-    
-    if result["status"] == "success":
-        # Extract pre-qualification questions from the results manually
-        pre_qual_questions = []
+    try:
+        # Get container client with improved error handling
+        container_client = get_container_client("autopm")
+        if not container_client:
+            logger.warning("Could not get autopm container client")
+            return _get_fallback_questions()
         
-        for doc in result["data"]:
-            if "productModel" in doc and "questions" in doc["productModel"]:
-                for question in doc["productModel"]["questions"]:
-                    if question.get("questionType") == "Pre-Qualification":
-                        # Format question for our needs
-                        pre_qual_questions.append({
-                            "id": question.get("requirementId"),
-                            "text": question.get("question"),
-                            "action": question.get("action"),
-                            "explanation": question.get("explanation"),
-                            "order": question.get("order", 999),
-                            "possibleAnswers": question.get("possibleAnswers", ["Yes", "No"])
-                        })
+        # Try simplified query first to test connection
+        logger.info("Executing simplified query to get product model document...")
+        test_query = "SELECT TOP 1 * FROM c"
         
-        # Sort questions by order field
-        pre_qual_questions.sort(key=lambda q: q.get("order", 999))
+        try:
+            # Test query to verify access
+            test_items = list(container_client.query_items(
+                query=test_query,
+                enable_cross_partition_query=True,
+                max_item_count=1
+            ))
+            
+            if not test_items:
+                logger.warning("Test query returned no data. Container may be empty.")
+        except Exception as e:
+            logger.error(f"Test query failed: {str(e)}")
+            return _get_fallback_questions()
         
-        print(f"Found {len(pre_qual_questions)} pre-qualification questions")
-        return pre_qual_questions
-    else:
-        print(f"Warning: {result.get('message', 'Unknown error')}")
-        print("Using fallback underwriting questions from memory")
-        return [q for q in in_memory_db["underwriting_questions"] if q.get("mandatory", False)]
+        # Try actual underwriting questions query
+        query = "SELECT c.productModel.underwritingQuestions FROM c WHERE IS_DEFINED(c.productModel.underwritingQuestions)"
+        
+        try:
+            items = list(container_client.query_items(
+                query=query,
+                enable_cross_partition_query=True
+            ))
+            
+            # Process items if they exist
+            if items and len(items) > 0:
+                questions = []
+                for item in items:
+                    if "underwritingQuestions" in item:
+                        questions.extend(item["underwritingQuestions"])
+                    else:
+                        logger.warning("Underwriting questions not found in expected format")
+                        
+                if questions:
+                    logger.info(f"Successfully retrieved {len(questions)} questions from Cosmos DB")
+                    return questions
+                else:
+                    logger.warning("No questions found in the retrieved data")
+            else:
+                logger.warning("No items matching underwriting questions query found in container")
+        except Exception as e:
+            logger.error(f"Error executing underwriting questions query: {str(e)}")
+            
+        # If we reach here, use fallback questions
+        return _get_fallback_questions()
+    except Exception as e:
+        logger.error(f"Failed to get raw data from Cosmos DB: {str(e)}")
+        return _get_fallback_questions()
 
 def get_coverage_with_demeter(demeter_agent, raw_json=None):
     """

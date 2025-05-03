@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h2 class="text-center">Welcome to Insurance App</h2>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="card h-100">
+                            <div class="card-body text-center">
+                                <img src="{{ url_for('static', filename='img/new_policy.svg') }}" alt="New Policy" class="img-fluid mb-3" style="max-height: 120px;">
+                                <h3>Create a New Policy</h3>
+                                <p>Start the process to get a new insurance policy with our AI-powered assistance.</p>
+                                <a href="/new-policy" class="btn btn-primary">Get Started</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="card h-100">
+                            <div class="card-body text-center">
+                                <img src="{{ url_for('static', filename='img/change_policy.svg') }}" alt="Change Policy" class="img-fluid mb-3" style="max-height: 120px;">
+                                <h3>Change Existing Policy</h3>
+                                <p>Update coverage, limits, or personal information on your existing policy.</p>
+                                <a href="/change-policy" class="btn btn-success">Modify Policy</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

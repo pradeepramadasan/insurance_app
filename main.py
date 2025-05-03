@@ -1,30 +1,39 @@
-import sys
 import logging
-from workflow.process import process_insurance_request  # Changed from insurance_app.workflow.process
-from db.cosmos_db import init_cosmos_db  # Changed from insurance_app.db.cosmos_db
+import os
+import sys
+from db.cosmos_db import init_cosmos_db
+
+# Remove duplicate imports and use only one import statement
+# If you added insurance_app_main to process.py (Solution 1)
+from workflow.process import insurance_app_main
+
+# Azure Best Practice: Configure logging once at application startup
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 
+
+
 def main():
-    """Main entry point for the insurance application"""
-    print("Initializing Insurance Policy Creation System...")
+    """
+    Main application entry point.
     
-    # Initialize Cosmos DB
-    init_cosmos_db()
+    Following Azure best practices:
+    - Initialize resources: Sets up Cosmos DB
+    - Error handling: Catches and logs initialization errors
+    - Clear entry point: Delegates to domain-specific handler
+    """
+    # Initialize required resources
+    try:
+        init_cosmos_db()
+    except Exception as e:
+        logging.error(f"Failed to initialize Cosmos DB: {str(e)}", exc_info=True)
+        print(f"Error initializing database: {str(e)}")
+        return
     
-    # Get customer file path if provided
-    customer_file = None
-    if len(sys.argv) > 1:
-        customer_file = sys.argv[1]
-    else:
-        file_input = input("Do you want to provide a customer data file? (yes/no): ").strip().lower()
-        if file_input == "yes":
-            customer_file = input("Enter the path to the customer data file: ").strip()
-    
-    # Process the insurance request
-    process_insurance_request(customer_file)
+    # Run the application
+    insurance_app_main()
 
 if __name__ == "__main__":
     main()

@@ -189,3 +189,6 @@ def extract_between_braces(text):
 
 # Alias for backward compatibility if needed
 extract_json_with_fallback = extract_json_content
+
+# Add this helper function
+
